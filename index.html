@@ -37,16 +37,30 @@
       z-index: 20;
       display: none;
     }
+    #durum {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: #fff;
+      font-family: sans-serif;
+      font-size: 13px;
+      background: rgba(0,0,0,0.6);
+      padding: 4px 8px;
+      border-radius: 4px;
+      z-index: 30;
+    }
   </style>
 </head>
 <body>
   <video id="video" controls autoplay muted playsinline></video>
   <button id="ses-btn">🔊 Sesi Aç</button>
+  <div id="durum">Yükleniyor...</div>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
     const video = document.getElementById('video');
     const sesBtn = document.getElementById('ses-btn');
+    const durum = document.getElementById('durum');
     const streamUrl = "https://tv-trt1.medya.trt.com.tr/master.m3u8";
 
     function sesiAc() {
@@ -57,17 +71,38 @@
 
     sesBtn.addEventListener('click', sesiAc);
 
+    // DEĞİŞTİ: Discord proxy'si için gerekli HLS ayarları
+    const hlsConfig = {
+      // Discord'un proxy'sinden geçerken kimlik bilgisi gönder
+      xhrSetup: function (xhr) {
+        xhr.withCredentials = true;
+      },
+      // Discord'da bağlantı bazen yavaş olur, süreleri uzat
+      manifestLoadingTimeOut: 30000,
+      manifestLoadingMaxRetry: 6,
+      manifestLoadingRetryDelay: 1000,
+      levelLoadingTimeOut: 30000,
+      levelLoadingMaxRetry: 6,
+      fragLoadingTimeOut: 30000,
+      fragLoadingMaxRetry: 6,
+      // Canlı yayında daha agresif buffer
+      liveSyncDurationCount: 3,
+      liveMaxLatencyDurationCount: 10,
+      enableWorker: true,
+      lowLatencyMode: false
+    };
+
     if (Hls.isSupported()) {
-      const hls = new Hls();
+      const hls = new Hls(hlsConfig); // DEĞİŞTİ: config eklendi
       hls.loadSource(streamUrl);
       hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, function() {
+
+      hls.on(Hls.Events.MANIFEST_PARSED, function () {
+        durum.textContent = "Yayın yüklendi, oynatılıyor...";
         video.play().then(() => {
-          // Oynatma başladıktan sonra sesi açmayı dene
           setTimeout(() => {
             video.muted = false;
             video.volume = 1;
-            // Hâlâ muted kalırsa butonu göster
             if (video.muted) {
               sesBtn.style.display = 'block';
             }
@@ -76,15 +111,42 @@
           sesBtn.style.display = 'block';
         });
       });
+
+      // DEĞİŞTİ: Hata olursa ekranda göster (sorunu görmek için)
+      hls.on(Hls.Events.ERROR, function (event, data) {
+        console.error("HLS Hatası:", data);
+        durum.textContent = "Hata: " + data.type + " / " + data.details;
+
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              durum.textContent = "Ağ hatası, tekrar deneniyor...";
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              durum.textContent = "Medya hatası, kurtarılıyor...";
+              hls.recoverMediaError();
+              break;
+            default:
+              durum.textContent = "Kritik hata, yeniden başlatılıyor...";
+              hls.destroy();
+              break;
+          }
+        }
+      });
+
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari vs. için
       video.src = streamUrl;
       video.play().then(() => {
         video.muted = false;
         video.volume = 1;
+        durum.textContent = "Oynatılıyor...";
       }).catch(() => {
         sesBtn.style.display = 'block';
       });
     } else {
+      durum.textContent = "Tarayıcı desteklemiyor.";
       alert("Tarayıcınız bu yayını desteklemiyor.");
     }
   </script>
