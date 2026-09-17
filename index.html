@@ -4,7 +4,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
   <title>TRT 1 Canlı</title>
 
   <style>
@@ -26,7 +25,7 @@
       position: relative;
     }
 
-    video {
+    #video {
       width: 100%;
       height: 100%;
       display: block;
@@ -40,19 +39,18 @@
       left: 50%;
       transform: translate(-50%, -50%);
 
-      background: rgba(0, 0, 0, 0.85);
-      color: #fff;
-
-      border: 2px solid #fff;
-      border-radius: 10px;
-
       padding: 14px 28px;
+
+      background: rgba(0, 0, 0, 0.85);
+      color: white;
+
+      border: 2px solid white;
+      border-radius: 10px;
 
       font-size: 18px;
       font-weight: bold;
 
       cursor: pointer;
-
       z-index: 20;
 
       display: none;
@@ -63,10 +61,11 @@
       top: 10px;
       left: 10px;
 
-      color: #fff;
+      padding: 7px 10px;
+
+      color: white;
       background: rgba(0, 0, 0, 0.8);
 
-      padding: 7px 10px;
       border-radius: 5px;
 
       font-family: monospace;
@@ -87,10 +86,10 @@
 
 <video
  id="video"
- controls
  autoplay
  muted
- playsinline> </video>
+ playsinline
+ controls> </video>
 
   <button id="ses-btn">
     🔊 Sesi Aç
@@ -105,44 +104,65 @@
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
   <script>
+
     const video = document.getElementById("video");
     const sesBtn = document.getElementById("ses-btn");
     const durum = document.getElementById("durum");
 
+
     /*
-     * TRT 1 canlı yayın
+     * =====================================================
+     * TRT 1 YAYIN ADRESİ
+     *
+     * PROXY KURDUĞUMUZDA SADECE BU SATIRI DEĞİŞTİRECEĞİZ.
+     * =====================================================
      */
+
     const streamUrl =
       "https://tv-trt1.medya.trt.com.tr/master_720.m3u8";
 
 
     /*
-     * SESİ AÇ
+     * =====================================================
+     * SES
+     * =====================================================
      */
-    function sesiAc() {
+
+    sesBtn.addEventListener("click", function () {
+
       video.muted = false;
       video.volume = 1;
 
       video.play()
-        .then(() => {
+        .then(function () {
+
           sesBtn.style.display = "none";
-          durum.textContent = "TRT 1 canlı yayın oynatılıyor.";
-        })
-        .catch((error) => {
-          console.error("Ses açma hatası:", error);
 
           durum.textContent =
-            "Ses açılamadı.\n" +
-            "Discord/Chromium otomatik ses oynatmayı engelliyor olabilir.";
-        });
-    }
+            "🔴 TRT 1 CANLI";
 
-    sesBtn.addEventListener("click", sesiAc);
+        })
+        .catch(function (error) {
+
+          console.error(
+            "Ses açılamadı:",
+            error
+          );
+
+          durum.textContent =
+            "Ses açılamadı.";
+
+        });
+
+    });
 
 
     /*
-     * HLS CONFIG
+     * =====================================================
+     * HLS AYARLARI
+     * =====================================================
      */
+
     const hlsConfig = {
 
       debug: false,
@@ -151,233 +171,281 @@
 
       lowLatencyMode: false,
 
-      // Manifest
       manifestLoadingTimeOut: 20000,
       manifestLoadingMaxRetry: 4,
       manifestLoadingRetryDelay: 1000,
 
-      // Level
       levelLoadingTimeOut: 20000,
       levelLoadingMaxRetry: 4,
 
-      // Fragment
       fragLoadingTimeOut: 20000,
       fragLoadingMaxRetry: 4,
 
-      // Canlı yayın
       liveSyncDurationCount: 3,
       liveMaxLatencyDurationCount: 10,
 
-      /*
-       * Kimlik bilgisi gönderme.
-       */
-      xhrSetup: function(xhr) {
+      xhrSetup: function (xhr) {
+
         xhr.withCredentials = false;
+
       }
+
     };
 
 
     /*
-     * HLS.JS DESTEKLENİYORSA
+     * =====================================================
+     * HLS.JS
+     * =====================================================
      */
+
     if (Hls.isSupported()) {
 
       const hls = new Hls(hlsConfig);
 
 
       /*
-       * HLS'i videoya bağla
+       * Video bağlandı
        */
-      hls.attachMedia(video);
+
+      hls.on(
+        Hls.Events.MEDIA_ATTACHED,
+        function () {
+
+          durum.textContent =
+            "TRT 1 yayınına bağlanılıyor...";
+
+          hls.loadSource(streamUrl);
+
+        }
+      );
 
 
       /*
-       * Media bağlandı
+       * Manifest başarıyla geldi
        */
-      hls.on(Hls.Events.MEDIA_ATTACHED, function() {
 
-        durum.textContent =
-          "TRT 1 yayınına bağlanılıyor...";
+      hls.on(
+        Hls.Events.MANIFEST_PARSED,
+        function () {
 
-        hls.loadSource(streamUrl);
-      });
+          durum.textContent =
+            "Manifest yüklendi.\n" +
+            "Yayın başlatılıyor...";
+
+
+          video.muted = true;
+
+
+          video.play()
+            .then(function () {
+
+              durum.textContent =
+                "🔴 TRT 1 CANLI";
+
+
+              /*
+               * Discord otomatik ses oynatmayı
+               * engellerse buton göster.
+               */
+
+              setTimeout(function () {
+
+                if (video.muted) {
+
+                  sesBtn.style.display = "block";
+
+                }
+
+              }, 500);
+
+            })
+            .catch(function (error) {
+
+              console.error(
+                "Oynatma hatası:",
+                error
+              );
+
+
+              durum.textContent =
+                "Oynatma hatası:\n" +
+                error.message;
+
+
+              sesBtn.style.display = "block";
+
+            });
+
+        }
+      );
 
 
       /*
-       * MANIFEST YÜKLENDİ
-       */
-      hls.on(Hls.Events.MANIFEST_PARSED, function() {
-
-        durum.textContent =
-          "Manifest yüklendi.\n" +
-          "TRT 1 oynatılıyor...";
-
-
-        video.muted = true;
-
-
-        video.play()
-          .then(() => {
-
-            /*
-             * Discord otomatik ses vermeyebilir.
-             * Kullanıcı butona basarsa ses açılır.
-             */
-            setTimeout(() => {
-
-              if (video.muted) {
-                sesBtn.style.display = "block";
-              }
-
-            }, 500);
-
-          })
-          .catch((error) => {
-
-            console.error(
-              "Video oynatma hatası:",
-              error
-            );
-
-            durum.textContent =
-              "Video oynatılamadı:\n" +
-              error.message;
-
-            sesBtn.style.display = "block";
-          });
-      });
-
-
-      /*
+       * =================================================
        * HLS HATALARI
+       * =================================================
        */
-      hls.on(Hls.Events.ERROR, function(event, data) {
 
-        console.error(
-          "HLS Hatası:",
-          data
-        );
+      hls.on(
+        Hls.Events.ERROR,
+        function (event, data) {
 
-
-        const hataMesaji =
-          "HLS HATASI\n\n" +
-
-          "Tür: " +
-          data.type +
-
-          "\nDetay: " +
-          data.details +
-
-          "\nÖlümcül: " +
-          data.fatal +
-
-          "\nYanıt: " +
-          (
-            data.response
-              ? data.response.code
-              : "yok"
-          ) +
-
-          "\nURL: " +
-          (
-            data.url
-              ? data.url.substring(0, 180)
-              : "yok"
+          console.error(
+            "HLS Hatası:",
+            data
           );
 
 
-        durum.textContent = hataMesaji;
+          const responseCode =
+            data.response &&
+            data.response.code
+              ? data.response.code
+              : "yok";
 
 
-        /*
-         * Ağ hatası
-         */
-        if (
-          data.fatal &&
-          data.type === Hls.ErrorTypes.NETWORK_ERROR
-        ) {
+          const errorUrl =
+            data.url
+              ? data.url.substring(0, 200)
+              : "yok";
 
-          durum.textContent +=
-            "\n\nAğ bağlantısı yeniden deneniyor...";
 
-          hls.startLoad();
+          durum.textContent =
+            "HLS HATASI\n\n" +
 
-          return;
+            "Tür: " +
+            data.type +
+
+            "\nDetay: " +
+            data.details +
+
+            "\nÖlümcül: " +
+            data.fatal +
+
+            "\nYanıt: " +
+            responseCode +
+
+            "\nURL: " +
+            errorUrl;
+
+
+          /*
+           * Ağ hatası
+           */
+
+          if (
+            data.fatal &&
+            data.type === Hls.ErrorTypes.NETWORK_ERROR
+          ) {
+
+            durum.textContent +=
+              "\n\nAğ hatası.\n" +
+              "Yayın yeniden deneniyor...";
+
+
+            hls.startLoad();
+
+            return;
+
+          }
+
+
+          /*
+           * Medya hatası
+           */
+
+          if (
+            data.fatal &&
+            data.type === Hls.ErrorTypes.MEDIA_ERROR
+          ) {
+
+            durum.textContent +=
+              "\n\nMedya hatası.\n" +
+              "Kurtarılmaya çalışılıyor...";
+
+
+            hls.recoverMediaError();
+
+            return;
+
+          }
+
+
+          /*
+           * Diğer kritik hatalar
+           */
+
+          if (data.fatal) {
+
+            durum.textContent +=
+              "\n\nKritik HLS hatası.";
+
+            hls.destroy();
+
+          }
+
         }
-
-
-        /*
-         * Medya hatası
-         */
-        if (
-          data.fatal &&
-          data.type === Hls.ErrorTypes.MEDIA_ERROR
-        ) {
-
-          durum.textContent +=
-            "\n\nMedya kurtarılıyor...";
-
-          hls.recoverMediaError();
-
-          return;
-        }
-
-
-        /*
-         * Diğer kritik hata
-         */
-        if (data.fatal) {
-
-          durum.textContent +=
-            "\n\nKritik HLS hatası.";
-
-          hls.destroy();
-        }
-
-      });
+      );
 
 
       /*
-       * VIDEO EVENTLERİ
+       * =================================================
+       * VIDEO DURUMU
+       * =================================================
        */
 
-      video.addEventListener("playing", function() {
+      video.addEventListener(
+        "playing",
+        function () {
 
-        durum.textContent =
-          "🔴 TRT 1 CANLI";
+          durum.textContent =
+            "🔴 TRT 1 CANLI";
 
-      });
-
-
-      video.addEventListener("waiting", function() {
-
-        durum.textContent =
-          "TRT 1 yükleniyor...";
-
-      });
+        }
+      );
 
 
-      video.addEventListener("stalled", function() {
+      video.addEventListener(
+        "waiting",
+        function () {
 
-        durum.textContent =
-          "Yayın bağlantısı bekleniyor...";
+          durum.textContent =
+            "TRT 1 yayını yükleniyor...";
 
-      });
+        }
+      );
 
 
-      video.addEventListener("error", function() {
+      video.addEventListener(
+        "stalled",
+        function () {
 
-        console.error(
-          "Video elementi hatası:",
-          video.error
-        );
+          durum.textContent =
+            "Yayın bağlantısı bekleniyor...";
 
-      });
+        }
+      );
+
+
+      video.addEventListener(
+        "error",
+        function () {
+
+          console.error(
+            "Video hatası:",
+            video.error
+          );
+
+        }
+      );
 
 
     /*
-     * Safari / native HLS
+     * =====================================================
+     * NATIVE HLS
+     * =====================================================
      */
+
     } else if (
       video.canPlayType(
         "application/vnd.apple.mpegurl"
@@ -393,24 +461,28 @@
 
       video.addEventListener(
         "loadedmetadata",
-        function() {
+        function () {
 
           video.play()
-            .then(() => {
+            .then(function () {
 
               durum.textContent =
                 "🔴 TRT 1 CANLI";
 
+
               if (video.muted) {
+
                 sesBtn.style.display = "block";
+
               }
 
             })
-            .catch((error) => {
+            .catch(function (error) {
 
               durum.textContent =
                 "Oynatma hatası:\n" +
                 error.message;
+
 
               sesBtn.style.display = "block";
 
@@ -421,12 +493,15 @@
 
 
     /*
-     * HLS desteklenmiyor
+     * =====================================================
+     * HLS DESTEKLENMİYOR
+     * =====================================================
      */
+
     } else {
 
       durum.textContent =
-        "Bu ortam HLS yayınlarını desteklemiyor.";
+        "Bu tarayıcı HLS yayınlarını desteklemiyor.";
 
     }
 
