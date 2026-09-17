@@ -14,6 +14,7 @@
       background: #000;
       height: 100vh;
       overflow: hidden;
+      position: relative;
     }
     video {
       width: 100%;
@@ -21,29 +22,68 @@
       object-fit: contain;
       background: #000;
     }
+    #ses-btn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.75);
+      color: white;
+      border: 2px solid white;
+      padding: 14px 28px;
+      font-size: 18px;
+      border-radius: 10px;
+      cursor: pointer;
+      z-index: 20;
+      display: none;
+    }
   </style>
 </head>
 <body>
   <video id="video" controls autoplay muted playsinline></video>
+  <button id="ses-btn">🔊 Sesi Aç</button>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
     const video = document.getElementById('video');
+    const sesBtn = document.getElementById('ses-btn');
     const streamUrl = "https://tv-trt1.medya.trt.com.tr/master.m3u8";
+
+    function sesiAc() {
+      video.muted = false;
+      video.volume = 1;
+      sesBtn.style.display = 'none';
+    }
+
+    sesBtn.addEventListener('click', sesiAc);
 
     if (Hls.isSupported()) {
       const hls = new Hls();
       hls.loadSource(streamUrl);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, function() {
-        video.play().catch(() => {
-          console.log("Otomatik oynatma engellendi, kullanıcı tıklayınca başlar");
+        video.play().then(() => {
+          // Oynatma başladıktan sonra sesi açmayı dene
+          setTimeout(() => {
+            video.muted = false;
+            video.volume = 1;
+            // Hâlâ muted kalırsa butonu göster
+            if (video.muted) {
+              sesBtn.style.display = 'block';
+            }
+          }, 500);
+        }).catch(() => {
+          sesBtn.style.display = 'block';
         });
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari için
       video.src = streamUrl;
-      video.play();
+      video.play().then(() => {
+        video.muted = false;
+        video.volume = 1;
+      }).catch(() => {
+        sesBtn.style.display = 'block';
+      });
     } else {
       alert("Tarayıcınız bu yayını desteklemiyor.");
     }
