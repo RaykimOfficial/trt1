@@ -1,128 +1,436 @@
 <!DOCTYPE html>
+
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <title>TRT 1 Canlı</title>
+
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; height: 100vh; overflow: hidden; position: relative; }
-    video { width: 100%; height: 100%; object-fit: contain; background: #000; }
-    #ses-btn {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      background: rgba(0,0,0,0.75); color: white; border: 2px solid white;
-      padding: 14px 28px; font-size: 18px; border-radius: 10px; cursor: pointer;
-      z-index: 20; display: none;
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+
+    body {
+      position: relative;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+      background: #000;
+    }
+
+    #ses-btn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+
+      border: 2px solid #fff;
+      border-radius: 10px;
+
+      padding: 14px 28px;
+
+      font-size: 18px;
+      font-weight: bold;
+
+      cursor: pointer;
+
+      z-index: 20;
+
+      display: none;
+    }
+
     #durum {
-      position: absolute; top: 10px; left: 10px; color: #fff;
-      font-family: monospace; font-size: 12px;
-      background: rgba(0,0,0,0.8); padding: 6px 10px;
-      border-radius: 4px; z-index: 30; max-width: 90%;
-      white-space: pre-wrap; word-break: break-all;
+      position: absolute;
+      top: 10px;
+      left: 10px;
+
+      color: #fff;
+      background: rgba(0, 0, 0, 0.8);
+
+      padding: 7px 10px;
+      border-radius: 5px;
+
+      font-family: monospace;
+      font-size: 12px;
+
+      max-width: 90%;
+
+      white-space: pre-wrap;
+      word-break: break-all;
+
+      z-index: 30;
     }
   </style>
-</head>
-<body>
-  <video id="video" controls autoplay muted playsinline></video>
-  <button id="ses-btn">🔊 Sesi Aç</button>
-  <div id="durum">Yükleniyor...</div>
 
-  <script>
-    // ---- Service Worker Kaydı (Discord proxy yönlendirmesi için) ----
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/mac/sw.js')
-        .then(reg => console.log('SW kaydedildi:', reg.scope))
-        .catch(err => console.error('SW hatası:', err));
-    }
-  </script>
+</head>
+
+<body>
+
+<video
+ id="video"
+ controls
+ autoplay
+ muted
+ playsinline> </video>
+
+  <button id="ses-btn">
+    🔊 Sesi Aç
+  </button>
+
+  <div id="durum">
+    TRT 1 yükleniyor...
+  </div>
+
+  <!-- HLS.js -->
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
   <script>
-    const video = document.getElementById('video');
-    const sesBtn = document.getElementById('ses-btn');
-    const durum = document.getElementById('durum');
+    const video = document.getElementById("video");
+    const sesBtn = document.getElementById("ses-btn");
+    const durum = document.getElementById("durum");
 
-    // Discord URL Eşlemesi: /trt -> raykimofficial.github.io/trt1/
-    const streamUrl = "https://tv-trt1.medya.trt.com.tr/master_720.m3u8";
+    /*
+     * TRT 1 canlı yayın
+     */
+    const streamUrl =
+      "https://tv-trt1.medya.trt.com.tr/master_720.m3u8";
 
+
+    /*
+     * SESİ AÇ
+     */
     function sesiAc() {
       video.muted = false;
       video.volume = 1;
-      sesBtn.style.display = 'none';
-    }
-    sesBtn.addEventListener('click', sesiAc);
 
+      video.play()
+        .then(() => {
+          sesBtn.style.display = "none";
+          durum.textContent = "TRT 1 canlı yayın oynatılıyor.";
+        })
+        .catch((error) => {
+          console.error("Ses açma hatası:", error);
+
+          durum.textContent =
+            "Ses açılamadı.\n" +
+            "Discord/Chromium otomatik ses oynatmayı engelliyor olabilir.";
+        });
+    }
+
+    sesBtn.addEventListener("click", sesiAc);
+
+
+    /*
+     * HLS CONFIG
+     */
     const hlsConfig = {
-      debug: true,
+
+      debug: false,
+
       enableWorker: false,
+
       lowLatencyMode: false,
+
+      // Manifest
       manifestLoadingTimeOut: 20000,
       manifestLoadingMaxRetry: 4,
       manifestLoadingRetryDelay: 1000,
+
+      // Level
       levelLoadingTimeOut: 20000,
       levelLoadingMaxRetry: 4,
+
+      // Fragment
       fragLoadingTimeOut: 20000,
       fragLoadingMaxRetry: 4,
+
+      // Canlı yayın
       liveSyncDurationCount: 3,
       liveMaxLatencyDurationCount: 10,
-      xhrSetup: function (xhr) {
+
+      /*
+       * Kimlik bilgisi gönderme.
+       */
+      xhrSetup: function(xhr) {
         xhr.withCredentials = false;
       }
     };
 
+
+    /*
+     * HLS.JS DESTEKLENİYORSA
+     */
     if (Hls.isSupported()) {
+
       const hls = new Hls(hlsConfig);
-      hls.loadSource(streamUrl);
+
+
+      /*
+       * HLS'i videoya bağla
+       */
       hls.attachMedia(video);
 
-      hls.on(Hls.Events.MANIFEST_PARSED, function () {
-        durum.textContent = "Manifest yüklendi, oynatılıyor...";
-        video.play().then(() => {
-          setTimeout(() => {
-            video.muted = false;
-            video.volume = 1;
-            if (video.muted) sesBtn.style.display = 'block';
-          }, 500);
-        }).catch((e) => {
-          durum.textContent = "Oynatma hatası: " + e.message;
-          sesBtn.style.display = 'block';
-        });
+
+      /*
+       * Media bağlandı
+       */
+      hls.on(Hls.Events.MEDIA_ATTACHED, function() {
+
+        durum.textContent =
+          "TRT 1 yayınına bağlanılıyor...";
+
+        hls.loadSource(streamUrl);
       });
 
-      hls.on(Hls.Events.ERROR, function (event, data) {
-        console.error("HLS Hatası:", data);
-        const hataMesaji = `Tür: ${data.type}\nDetay: ${data.details}\nÖlümcül: ${data.fatal}\nYanıt: ${data.response ? data.response.code : 'yok'}\nURL: ${data.url ? data.url.substring(0, 120) : 'yok'}`;
+
+      /*
+       * MANIFEST YÜKLENDİ
+       */
+      hls.on(Hls.Events.MANIFEST_PARSED, function() {
+
+        durum.textContent =
+          "Manifest yüklendi.\n" +
+          "TRT 1 oynatılıyor...";
+
+
+        video.muted = true;
+
+
+        video.play()
+          .then(() => {
+
+            /*
+             * Discord otomatik ses vermeyebilir.
+             * Kullanıcı butona basarsa ses açılır.
+             */
+            setTimeout(() => {
+
+              if (video.muted) {
+                sesBtn.style.display = "block";
+              }
+
+            }, 500);
+
+          })
+          .catch((error) => {
+
+            console.error(
+              "Video oynatma hatası:",
+              error
+            );
+
+            durum.textContent =
+              "Video oynatılamadı:\n" +
+              error.message;
+
+            sesBtn.style.display = "block";
+          });
+      });
+
+
+      /*
+       * HLS HATALARI
+       */
+      hls.on(Hls.Events.ERROR, function(event, data) {
+
+        console.error(
+          "HLS Hatası:",
+          data
+        );
+
+
+        const hataMesaji =
+          "HLS HATASI\n\n" +
+
+          "Tür: " +
+          data.type +
+
+          "\nDetay: " +
+          data.details +
+
+          "\nÖlümcül: " +
+          data.fatal +
+
+          "\nYanıt: " +
+          (
+            data.response
+              ? data.response.code
+              : "yok"
+          ) +
+
+          "\nURL: " +
+          (
+            data.url
+              ? data.url.substring(0, 180)
+              : "yok"
+          );
+
+
         durum.textContent = hataMesaji;
 
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              durum.textContent += "\n\nAğ hatası, tekrar deneniyor...";
-              hls.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              durum.textContent += "\n\nMedya hatası, kurtarılıyor...";
-              hls.recoverMediaError();
-              break;
-            default:
-              durum.textContent += "\n\nKritik hata, yeniden başlatılıyor...";
-              hls.destroy();
-              break;
-          }
+
+        /*
+         * Ağ hatası
+         */
+        if (
+          data.fatal &&
+          data.type === Hls.ErrorTypes.NETWORK_ERROR
+        ) {
+
+          durum.textContent +=
+            "\n\nAğ bağlantısı yeniden deneniyor...";
+
+          hls.startLoad();
+
+          return;
         }
+
+
+        /*
+         * Medya hatası
+         */
+        if (
+          data.fatal &&
+          data.type === Hls.ErrorTypes.MEDIA_ERROR
+        ) {
+
+          durum.textContent +=
+            "\n\nMedya kurtarılıyor...";
+
+          hls.recoverMediaError();
+
+          return;
+        }
+
+
+        /*
+         * Diğer kritik hata
+         */
+        if (data.fatal) {
+
+          durum.textContent +=
+            "\n\nKritik HLS hatası.";
+
+          hls.destroy();
+        }
+
       });
 
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+
+      /*
+       * VIDEO EVENTLERİ
+       */
+
+      video.addEventListener("playing", function() {
+
+        durum.textContent =
+          "🔴 TRT 1 CANLI";
+
+      });
+
+
+      video.addEventListener("waiting", function() {
+
+        durum.textContent =
+          "TRT 1 yükleniyor...";
+
+      });
+
+
+      video.addEventListener("stalled", function() {
+
+        durum.textContent =
+          "Yayın bağlantısı bekleniyor...";
+
+      });
+
+
+      video.addEventListener("error", function() {
+
+        console.error(
+          "Video elementi hatası:",
+          video.error
+        );
+
+      });
+
+
+    /*
+     * Safari / native HLS
+     */
+    } else if (
+      video.canPlayType(
+        "application/vnd.apple.mpegurl"
+      )
+    ) {
+
+      durum.textContent =
+        "Native HLS kullanılıyor...";
+
+
       video.src = streamUrl;
-      video.play().then(() => {
-        video.muted = false; video.volume = 1;
-        durum.textContent = "Oynatılıyor...";
-      }).catch(() => { sesBtn.style.display = 'block'; });
+
+
+      video.addEventListener(
+        "loadedmetadata",
+        function() {
+
+          video.play()
+            .then(() => {
+
+              durum.textContent =
+                "🔴 TRT 1 CANLI";
+
+              if (video.muted) {
+                sesBtn.style.display = "block";
+              }
+
+            })
+            .catch((error) => {
+
+              durum.textContent =
+                "Oynatma hatası:\n" +
+                error.message;
+
+              sesBtn.style.display = "block";
+
+            });
+
+        }
+      );
+
+
+    /*
+     * HLS desteklenmiyor
+     */
     } else {
-      durum.textContent = "Tarayıcı desteklemiyor.";
-      alert("Tarayıcınız bu yayını desteklemiyor.");
+
+      durum.textContent =
+        "Bu ortam HLS yayınlarını desteklemiyor.";
+
     }
+
   </script>
+
 </body>
 </html>
