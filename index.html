@@ -1,441 +1,502 @@
 <!DOCTYPE html>
-
 <html lang="tr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TRT 1 Canlı</title>
+    <meta charset="UTF-8">
 
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    <!-- Discord Activity / mobil / tarayıcı uyumluluğu -->
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    >
 
-    html,
-    body {
-      width: 100%;
-      height: 100%;
-      background: #000;
-      overflow: hidden;
-    }
+    <title>TRT 1 Canlı Yayın</title>
 
-    body {
-      position: relative;
-    }
+    <style>
+        * {
+            box-sizing: border-box;
+        }
 
-    video {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      background: #000;
-    }
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
 
-    #ses-btn {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-      background: rgba(0, 0, 0, 0.8);
-      color: white;
+        .player {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-      border: 2px solid white;
-      padding: 14px 28px;
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #000;
+        }
 
-      font-size: 18px;
-      border-radius: 10px;
+        .status {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
 
-      cursor: pointer;
-      z-index: 20;
+            color: white;
+            background: rgba(0, 0, 0, 0.75);
 
-      display: none;
-    }
+            padding: 12px 18px;
+            border-radius: 8px;
 
-    #durum {
-      position: absolute;
-      top: 10px;
-      left: 10px;
+            font-size: 14px;
+            text-align: center;
 
-      color: white;
+            z-index: 10;
+            pointer-events: none;
+        }
 
-      font-family: monospace;
-      font-size: 12px;
+        .hidden {
+            display: none;
+        }
 
-      background: rgba(0, 0, 0, 0.8);
-
-      padding: 6px 10px;
-      border-radius: 4px;
-
-      z-index: 30;
-
-      max-width: 90%;
-
-      white-space: pre-wrap;
-      word-break: break-all;
-    }
-  </style>
-
+        .error {
+            color: #ff5555;
+        }
+    </style>
 </head>
 
 <body>
 
-<video
- id="video"
- controls
- autoplay
- muted
- playsinline> </video>
+<div class="player">
 
-  <button id="ses-btn">
-    🔊 Sesi Aç
-  </button>
+    <video
+        id="video"
+        controls
+        playsinline
+        webkit-playsinline
+        preload="auto"
+        autoplay
+    ></video>
 
-  <div id="durum">
-    Yükleniyor...
-  </div>
+    <div id="status" class="status">
+        TRT 1 yayınına bağlanılıyor...
+    </div>
 
-  <!-- HLS.JS -->
+</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<!-- HLS.js -->
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.15"></script>
 
-  <script>
+<script>
 
-    const video = document.getElementById("video");
-    const sesBtn = document.getElementById("ses-btn");
-    const durum = document.getElementById("durum");
+    /*
+    ============================================================
+    TRt 1 CLOUDLFARE WORKER
+    ============================================================
+    */
+
+    const WORKER_URL =
+        "https://royal-sun-393f.raykimofficial.workers.dev/";
 
 
     /*
-     * TRT 1 CANLI YAYIN
-     *
-     * BUNA DOKUNMADIM.
-     */
+    ============================================================
+    ELEMENTLER
+    ============================================================
+    */
 
-    const streamUrl =
-      "https://royal-sun-393f.raykimofficial.workers.dev/";
+    const video =
+        document.getElementById("video");
+
+    const status =
+        document.getElementById("status");
 
 
     /*
-     * SES AÇ
-     */
+    ============================================================
+    DURUM MESAJI
+    ============================================================
+    */
 
-    function sesiAc() {
+    function setStatus(message, error = false) {
 
-      video.muted = false;
-      video.volume = 1;
+        status.textContent = message;
 
-      video.play()
-        .then(function () {
+        status.classList.remove("hidden");
 
-          sesBtn.style.display = "none";
-
-        })
-        .catch(function (error) {
-
-          console.error(
-            "Ses açılamadı:",
-            error
-          );
-
-        });
-
+        if (error) {
+            status.classList.add("error");
+        } else {
+            status.classList.remove("error");
+        }
     }
 
-    sesBtn.addEventListener(
-      "click",
-      sesiAc
-    );
-
 
     /*
-     * HLS AYARLARI
-     */
+    ============================================================
+    OYNATMA
+    ============================================================
+    */
 
-    const hlsConfig = {
+    function startPlayer() {
 
-      debug: false,
+        /*
+        HLS.js destekleniyor mu?
+        */
 
-      enableWorker: false,
+        if (Hls.isSupported()) {
 
-      lowLatencyMode: false,
+            console.log("HLS.js destekleniyor.");
 
-      manifestLoadingTimeOut: 20000,
-      manifestLoadingMaxRetry: 4,
-      manifestLoadingRetryDelay: 1000,
-
-      levelLoadingTimeOut: 20000,
-      levelLoadingMaxRetry: 4,
-
-      fragLoadingTimeOut: 20000,
-      fragLoadingMaxRetry: 4,
-
-      liveSyncDurationCount: 3,
-      liveMaxLatencyDurationCount: 10,
-
-      xhrSetup: function (xhr) {
-
-        xhr.withCredentials = false;
-
-      }
-
-    };
-
-
-    /*
-     * HLS.JS DESTEKLENİYORSA
-     */
-
-    if (Hls.isSupported()) {
-
-      const hls = new Hls(hlsConfig);
-
-
-      /*
-       * ÖNEMLİ:
-       * İlk çalışan kodundaki sırayı kullanıyoruz.
-       */
-
-      hls.loadSource(streamUrl);
-
-      hls.attachMedia(video);
-
-
-      /*
-       * MANIFEST
-       */
-
-      hls.on(
-        Hls.Events.MANIFEST_PARSED,
-        function () {
-
-          durum.textContent =
-            "Manifest yüklendi, oynatılıyor...";
-
-
-          video.play()
-            .then(function () {
-
-              /*
-               * Otomatik ses Discord tarafından
-               * engellenebilir.
-               */
-
-              setTimeout(function () {
-
-                if (video.muted) {
-
-                  sesBtn.style.display = "block";
-
-                }
-
-              }, 500);
-
-            })
-            .catch(function (error) {
-
-              console.error(
-                "Oynatma hatası:",
-                error
-              );
-
-
-              durum.textContent =
-                "Oynatma hatası: " +
-                error.message;
-
-
-              sesBtn.style.display = "block";
-
-            });
-
-        }
-      );
-
-
-      /*
-       * HLS HATALARI
-       */
-
-      hls.on(
-        Hls.Events.ERROR,
-        function (event, data) {
-
-          console.error(
-            "HLS Hatası:",
-            data
-          );
-
-
-          const hataMesaji =
-            "HLS HATASI\n" +
-
-            "Tür: " +
-            data.type +
-
-            "\nDetay: " +
-            data.details +
-
-            "\nÖlümcül: " +
-            data.fatal +
-
-            "\nYanıt: " +
-            (
-              data.response
-                ? data.response.code
-                : "yok"
-            ) +
-
-            "\nURL: " +
-            (
-              data.url
-                ? data.url.substring(0, 200)
-                : "yok"
+            setStatus(
+                "TRT 1 yayınına bağlanılıyor..."
             );
 
 
-          durum.textContent =
-            hataMesaji;
+            /*
+            Yeni HLS nesnesi
+            */
 
+            const hls = new Hls({
 
-          /*
-           * NETWORK ERROR
-           */
+                /*
+                Canlı yayın için bazı ayarlar
+                */
 
-          if (
-            data.fatal &&
-            data.type ===
-            Hls.ErrorTypes.NETWORK_ERROR
-          ) {
+                enableWorker: true,
 
-            durum.textContent +=
-              "\n\nAğ hatası, tekrar deneniyor...";
+                lowLatencyMode: false,
 
-            hls.startLoad();
+                backBufferLength: 30,
 
-            return;
+                maxBufferLength: 30,
 
-          }
+                maxMaxBufferLength: 60,
 
+                liveSyncDurationCount: 3,
 
-          /*
-           * MEDIA ERROR
-           */
+                liveMaxLatencyDurationCount: 6,
 
-          if (
-            data.fatal &&
-            data.type ===
-            Hls.ErrorTypes.MEDIA_ERROR
-          ) {
+                /*
+                Worker'dan gelen kaynaklara
+                kimlik bilgisi göndermiyoruz.
+                */
 
-            durum.textContent +=
-              "\n\nMedya hatası, kurtarılıyor...";
+                xhrSetup: function (xhr) {
 
-            hls.recoverMediaError();
+                    xhr.withCredentials = false;
 
-            return;
-
-          }
-
-
-          /*
-           * KRİTİK HATA
-           */
-
-          if (data.fatal) {
-
-            durum.textContent +=
-              "\n\nKritik hata.";
-
-            hls.destroy();
-
-          }
-
-        }
-      );
-
-
-      /*
-       * VIDEO OYNUYOR
-       */
-
-      video.addEventListener(
-        "playing",
-        function () {
-
-          durum.textContent =
-            "🔴 TRT 1 CANLI";
-
-        }
-      );
-
-
-      /*
-       * BEKLEME
-       */
-
-      video.addEventListener(
-        "waiting",
-        function () {
-
-          durum.textContent =
-            "TRT 1 yayını yükleniyor...";
-
-        }
-      );
-
-
-    /*
-     * NATIVE HLS
-     */
-
-    } else if (
-      video.canPlayType(
-        "application/vnd.apple.mpegurl"
-      )
-    ) {
-
-      video.src = streamUrl;
-
-
-      video.addEventListener(
-        "loadedmetadata",
-        function () {
-
-          video.play()
-            .then(function () {
-
-              durum.textContent =
-                "🔴 TRT 1 CANLI";
-
-            })
-            .catch(function (error) {
-
-              durum.textContent =
-                "Oynatma hatası: " +
-                error.message;
-
-              sesBtn.style.display = "block";
+                }
 
             });
 
+
+            /*
+            ====================================================
+            HLS HATALARI
+            ====================================================
+            */
+
+            hls.on(
+                Hls.Events.ERROR,
+                function (event, data) {
+
+                    console.error(
+                        "HLS Hatası:",
+                        data
+                    );
+
+
+                    /*
+                    Fatal hata
+                    */
+
+                    if (data.fatal) {
+
+                        switch (data.type) {
+
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+
+                                console.log(
+                                    "Ağ hatası. Yeniden deneniyor..."
+                                );
+
+                                setStatus(
+                                    "Yayın bağlantısı yenileniyor..."
+                                );
+
+                                /*
+                                Birkaç saniye sonra tekrar dene
+                                */
+
+                                setTimeout(function () {
+
+                                    hls.startLoad();
+
+                                }, 2000);
+
+                                break;
+
+
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+
+                                console.log(
+                                    "Medya hatası. Kurtarılmaya çalışılıyor..."
+                                );
+
+                                hls.recoverMediaError();
+
+                                break;
+
+
+                            default:
+
+                                console.error(
+                                    "Kurtarılamayan HLS hatası."
+                                );
+
+                                setStatus(
+                                    "Yayın oynatılamadı.",
+                                    true
+                                );
+
+                                hls.destroy();
+
+                                break;
+                        }
+                    }
+                }
+            );
+
+
+            /*
+            ====================================================
+            MANIFEST YÜKLENDİ
+            ====================================================
+            */
+
+            hls.on(
+                Hls.Events.MANIFEST_PARSED,
+                function (event, data) {
+
+                    console.log(
+                        "TRT 1 manifest yüklendi."
+                    );
+
+                    console.log(
+                        "Bulunan kalite sayısı:",
+                        data.levels.length
+                    );
+
+
+                    setStatus(
+                        "TRT 1 yayını başlatılıyor..."
+                    );
+
+
+                    /*
+                    Otomatik oynatma
+                    */
+
+                    video.play()
+                        .then(function () {
+
+                            console.log(
+                                "TRT 1 oynatılıyor."
+                            );
+
+                            status.classList.add(
+                                "hidden"
+                            );
+
+                        })
+                        .catch(function (error) {
+
+                            console.log(
+                                "Otomatik oynatma engellendi:",
+                                error
+                            );
+
+                            /*
+                            Discord/tarayıcı autoplay
+                            engellerse kullanıcı play'e basabilir.
+                            */
+
+                            setStatus(
+                                "Yayın hazır. ▶ Oynat'a bas."
+                            );
+
+                        });
+
+                }
+            );
+
+
+            /*
+            ====================================================
+            MEDIA ATTACHED
+            ====================================================
+            */
+
+            hls.on(
+                Hls.Events.MEDIA_ATTACHED,
+                function () {
+
+                    console.log(
+                        "Video HLS.js'e bağlandı."
+                    );
+
+                }
+            );
+
+
+            /*
+            ====================================================
+            WORKER'DAN HLS MANIFESTİNİ YÜKLE
+            ====================================================
+            */
+
+            console.log(
+                "Worker:",
+                WORKER_URL
+            );
+
+
+            hls.loadSource(
+                WORKER_URL
+            );
+
+
+            /*
+            ====================================================
+            VIDEO ELEMENTINE BAĞLA
+            ====================================================
+            */
+
+            hls.attachMedia(
+                video
+            );
+
+
+            /*
+            Sayfa kapanırken temizle
+            */
+
+            window.addEventListener(
+                "beforeunload",
+                function () {
+
+                    hls.destroy();
+
+                }
+            );
+
         }
-      );
+
+
+        /*
+        ========================================================
+        SAFARI / NATIVE HLS
+        ========================================================
+        */
+
+        else if (
+            video.canPlayType(
+                "application/vnd.apple.mpegurl"
+            )
+        ) {
+
+            console.log(
+                "Native HLS destekleniyor."
+            );
+
+
+            /*
+            Safari gibi tarayıcılarda
+            */
+
+            video.src =
+                WORKER_URL;
+
+
+            video.addEventListener(
+                "loadedmetadata",
+                function () {
+
+                    video.play()
+                        .then(function () {
+
+                            status.classList.add(
+                                "hidden"
+                            );
+
+                        })
+                        .catch(function () {
+
+                            setStatus(
+                                "Yayın hazır. ▶ Oynat'a bas."
+                            );
+
+                        });
+
+                }
+            );
+
+        }
+
+
+        /*
+        ========================================================
+        HLS HİÇ DESTEKLENMİYOR
+        ========================================================
+        */
+
+        else {
+
+            console.error(
+                "Bu ortam HLS desteklemiyor."
+            );
+
+
+            setStatus(
+                "Bu ortam HLS yayınını desteklemiyor.",
+                true
+            );
+
+        }
+    }
 
 
     /*
-     * HLS YOK
-     */
+    ============================================================
+    SAYFA HAZIR
+    ============================================================
+    */
 
-    } else {
+    window.addEventListener(
+        "load",
+        function () {
 
-      durum.textContent =
-        "Tarayıcınız HLS desteklemiyor.";
+            startPlayer();
 
-    }
+        }
+    );
 
-  </script>
+</script>
 
 </body>
 </html>
