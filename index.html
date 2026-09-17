@@ -28,12 +28,23 @@
   <button id="ses-btn">🔊 Sesi Aç</button>
   <div id="durum">Yükleniyor...</div>
 
+  <script>
+    // ---- Service Worker Kaydı (Discord proxy yönlendirmesi için) ----
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/mac/sw.js')
+        .then(reg => console.log('SW kaydedildi:', reg.scope))
+        .catch(err => console.error('SW hatası:', err));
+    }
+  </script>
+
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
     const video = document.getElementById('video');
     const sesBtn = document.getElementById('ses-btn');
     const durum = document.getElementById('durum');
-    const streamUrl = "https://tv-trt1.medya.trt.com.tr/master.m3u8";
+
+    // Discord URL Eşlemesi: /trt -> raykimofficial.github.io/trt1/
+    const streamUrl = "/trt/master.m3u8";
 
     function sesiAc() {
       video.muted = false;
@@ -42,10 +53,9 @@
     }
     sesBtn.addEventListener('click', sesiAc);
 
-    // Hata ayıklama modu açık, xhrSetup kaldırıldı
     const hlsConfig = {
-      debug: true,                 // Konsola detaylı log basar
-      enableWorker: false,         // Discord iframe'inde worker sorun çıkarabilir
+      debug: true,
+      enableWorker: false,
       lowLatencyMode: false,
       manifestLoadingTimeOut: 20000,
       manifestLoadingMaxRetry: 4,
@@ -55,7 +65,10 @@
       fragLoadingTimeOut: 20000,
       fragLoadingMaxRetry: 4,
       liveSyncDurationCount: 3,
-      liveMaxLatencyDurationCount: 10
+      liveMaxLatencyDurationCount: 10,
+      xhrSetup: function (xhr) {
+        xhr.withCredentials = false;
+      }
     };
 
     if (Hls.isSupported()) {
@@ -79,8 +92,7 @@
 
       hls.on(Hls.Events.ERROR, function (event, data) {
         console.error("HLS Hatası:", data);
-        // Ekranda detaylı hata göster
-        const hataMesaji = `Tür: ${data.type}\nDetay: ${data.details}\nÖlümcül: ${data.fatal}\nYanıt: ${data.response ? data.response.code : 'yok'}\nURL: ${data.url ? data.url.substring(0, 80) : 'yok'}`;
+        const hataMesaji = `Tür: ${data.type}\nDetay: ${data.details}\nÖlümcül: ${data.fatal}\nYanıt: ${data.response ? data.response.code : 'yok'}\nURL: ${data.url ? data.url.substring(0, 120) : 'yok'}`;
         durum.textContent = hataMesaji;
 
         if (data.fatal) {
