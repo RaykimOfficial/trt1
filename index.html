@@ -2,33 +2,481 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <title>Test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>TRT 1 Canlı</title>
 
   <script src="hls.min.js"></script>
 
   <style>
-    body {
-      background: #111;
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+
+    #playerWrapper {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #000;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+
+    #status {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 1000;
+
+      max-width: 500px;
+      padding: 14px 18px;
+
+      background: rgba(0, 0, 0, 0.85);
       color: white;
-      font-family: Arial;
-      font-size: 26px;
-      padding: 30px;
+
+      border-radius: 10px;
+      font-size: 16px;
+      line-height: 1.5;
+
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    #status.success {
+      background: rgba(0, 120, 40, 0.9);
+    }
+
+    #status.error {
+      background: rgba(180, 0, 0, 0.95);
     }
   </style>
 </head>
 
 <body>
 
-<div id="sonuc">JavaScript başlıyor...</div>
+<div id="playerWrapper">
+
+  <div id="status">
+    Yayın hazırlanıyor...
+  </div>
+
+  <video
+    id="video"
+    controls
+    autoplay
+    muted
+    playsinline
+  ></video>
+
+</div>
 
 <script>
-const sonuc = document.getElementById("sonuc");
+  const video = document.getElementById("video");
+  const statusBox = document.getElementById("status");
 
-if (typeof Hls === "undefined") {
-  sonuc.textContent = "HATA: HLS.JS YÜKLENMEDİ";
-} else {
-  sonuc.textContent = "BAŞARILI: HLS.JS YÜKLENDİ";
-}
+  // Discord Developer Portal:
+  // /trt -> tv-trt1.medya.trt.com.tr
+
+  const streamUrl = "/trt/master_720.m3u8";
+
+
+  function status(message, type = "") {
+    console.log(message);
+
+    statusBox.textContent = message;
+    statusBox.className = type;
+    statusBox.style.display = "block";
+  }
+
+
+  async function playVideo() {
+    try {
+
+      await video.play();
+
+      status(
+        "TRT 1 canlı yayın oynuyor.",
+        "success"
+      );
+
+      setTimeout(() => {
+        statusBox.style.display = "none";
+      }, 2000);
+
+    } catch (error) {
+
+      console.error(
+        "PLAY ERROR:",
+        error
+      );
+
+      status(
+        "Video yüklendi fakat oynatma başlatılamadı.\n\n" +
+        error.message,
+        "error"
+      );
+    }
+  }
+
+
+  function start() {
+
+    if (typeof Hls === "undefined") {
+      status(
+        "HATA: HLS.JS yüklenemedi.",
+        "error"
+      );
+
+      return;
+    }
+
+
+    if (Hls.isSupported()) {
+
+      status(
+        "HLS hazır.\nTRT 1 yayınına bağlanılıyor..."
+      );
+
+
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 30
+      });
+
+
+      window.hls = hls;
+
+
+      hls.on(
+        Hls.Events.MEDIA_ATTACHED,
+        function () {
+
+          status(
+            "Video hazır.\nYayın listesi yükleniyor..."
+          );
+
+          hls.loadSource(streamUrl);
+
+        }
+      );
+
+
+      hls.on(
+        Hls.Events.MANIFEST_LOADING,
+        function () {
+
+          status(
+            "TRT yayın listesi indiriliyor..."
+          );
+
+        }
+      );
+
+
+      hls.on(
+        Hls.Events.MANIFEST_PARSED,
+        function (event, data) {
+
+          console.log(
+            "MANIFEST PARSED:",
+            data
+          );
+
+          status(
+            "Yayın listesi geldi.\nVideo parçaları bekleniyor...",
+            "success"
+          );
+
+        }
+      );
+
+
+      hls.on(
+        Hls.Events.FRAG_LOADING,
+        function (event, data) {
+
+          console.log(
+            "SEGMENT İSTENİYOR:",
+            data.frag.url
+          );
+
+          status(
+            "Video parçası indiriliyor..."
+          );
+
+        }
+      );
+
+
+      hls.on(
+        Hls.Events.FRAG_LOADED,
+        function (event, data) {
+
+          console.log(
+            "SEGMENT GELDİ:",
+            data.frag.url
+          );
+
+          status(
+            "Video parçası geldi.\nYayın başlatılıyor...",
+            "success"
+          );
+
+        }
+      );
+
+
+      hls.on(
+        Hls.Events.BUFFER_APPENDED,
+        function () {
+
+          console.log(
+            "BUFFER APPENDED"
+          );
+
+          if (video.paused) {
+            playVideo();
+          }
+
+        }
+      );
+
+
+      hls.on(
+        Hls.Events.ERROR,
+        function (event, data) {
+
+          console.error(
+            "HLS ERROR:",
+            data
+          );
+
+
+          let message =
+            "HLS HATASI\n\n" +
+            "Detay: " +
+            data.details;
+
+
+          if (data.type) {
+            message +=
+              "\nTür: " +
+              data.type;
+          }
+
+
+          if (data.response?.code) {
+            message +=
+              "\nHTTP: " +
+              data.response.code;
+          }
+
+
+          if (data.response?.url) {
+            message +=
+              "\nURL: " +
+              data.response.url;
+          }
+
+
+          if (data.frag?.url) {
+            message +=
+              "\nSegment: " +
+              data.frag.url;
+          }
+
+
+          status(
+            message,
+            "error"
+          );
+
+
+          if (data.fatal) {
+
+            if (
+              data.type ===
+              Hls.ErrorTypes.NETWORK_ERROR
+            ) {
+
+              console.log(
+                "Network recovery..."
+              );
+
+              setTimeout(() => {
+                hls.startLoad();
+              }, 2000);
+
+            }
+
+            else if (
+              data.type ===
+              Hls.ErrorTypes.MEDIA_ERROR
+            ) {
+
+              console.log(
+                "Media recovery..."
+              );
+
+              hls.recoverMediaError();
+
+            }
+
+            else {
+
+              console.log(
+                "HLS durduruldu."
+              );
+
+              hls.destroy();
+
+            }
+          }
+
+        }
+      );
+
+
+      hls.attachMedia(video);
+
+    }
+
+    else if (
+      video.canPlayType(
+        "application/vnd.apple.mpegurl"
+      )
+    ) {
+
+      status(
+        "Tarayıcının yerleşik HLS desteği kullanılıyor..."
+      );
+
+      video.src = streamUrl;
+
+      video.addEventListener(
+        "loadedmetadata",
+        playVideo,
+        {
+          once: true
+        }
+      );
+
+    }
+
+    else {
+
+      status(
+        "Bu tarayıcı HLS desteklemiyor.",
+        "error"
+      );
+
+    }
+
+  }
+
+
+  video.addEventListener(
+    "loadedmetadata",
+    function () {
+      console.log(
+        "VIDEO METADATA GELDİ"
+      );
+    }
+  );
+
+
+  video.addEventListener(
+    "canplay",
+    function () {
+
+      console.log(
+        "VIDEO CANPLAY"
+      );
+
+      status(
+        "Video oynatılmaya hazır.",
+        "success"
+      );
+
+      playVideo();
+
+    }
+  );
+
+
+  video.addEventListener(
+    "playing",
+    function () {
+
+      console.log(
+        "VIDEO PLAYING"
+      );
+
+      status(
+        "TRT 1 canlı yayın oynuyor.",
+        "success"
+      );
+
+      setTimeout(() => {
+        statusBox.style.display = "none";
+      }, 2000);
+
+    }
+  );
+
+
+  video.addEventListener(
+    "waiting",
+    function () {
+
+      console.log(
+        "VIDEO WAITING"
+      );
+
+    }
+  );
+
+
+  video.addEventListener(
+    "error",
+    function () {
+
+      console.error(
+        "VIDEO ERROR:",
+        video.error
+      );
+
+      if (video.error) {
+
+        status(
+          "VIDEO HATASI\n\n" +
+          "Kod: " +
+          video.error.code +
+          "\n" +
+          "Mesaj: " +
+          video.error.message,
+          "error"
+        );
+
+      }
+
+    }
+  );
+
+
+  start();
+
 </script>
 
 </body>
