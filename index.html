@@ -40,33 +40,32 @@
 
     #status {
       position: absolute;
-      top: 12px;
-      left: 12px;
+      top: 16px;
+      left: 16px;
+      z-index: 9999;
 
-      max-width: calc(100% - 24px);
+      max-width: 420px;
 
-      padding: 10px 14px;
+      padding: 14px 16px;
 
-      background: rgba(0, 0, 0, 0.75);
-      color: white;
+      background: rgba(0, 0, 0, 0.78);
+      color: #fff;
+
+      border-radius: 10px;
 
       font-size: 14px;
-      line-height: 1.4;
-
-      border-radius: 8px;
-
-      z-index: 10;
+      line-height: 1.5;
 
       white-space: pre-wrap;
       word-break: break-word;
     }
 
     #status.success {
-      background: rgba(0, 120, 0, 0.8);
+      background: rgba(0, 120, 40, 0.88);
     }
 
     #status.error {
-      background: rgba(160, 0, 0, 0.85);
+      background: rgba(170, 0, 0, 0.9);
     }
   </style>
 </head>
@@ -93,20 +92,62 @@
     const video = document.getElementById("video");
     const statusBox = document.getElementById("status");
 
-    // Discord Activity URL Mapping kullanıyorsan:
-    const streamUrl = "/trt/master_720.m3u8";
+    // Gerçek TRT yayını
+    const DIRECT_STREAM =
+      "https://tv-trt1.medya.trt.com.tr/master_720.m3u8";
 
-    // Normal GitHub Pages testinde kullanmak istersen:
-    // const streamUrl = "https://tv-trt1.medya.trt.com.tr/master_720.m3u8";
+    // Discord Activity URL Mapping yolu
+    const DISCORD_PROXY_STREAM =
+      "/.proxy/trt/master_720.m3u8";
+
 
     function setStatus(message, type = "") {
       statusBox.textContent = message;
       statusBox.className = type;
-      console.log(message);
+
+      console.log("[STATUS]", message);
     }
 
-    async function tryPlay() {
+
+    function isDiscordActivity() {
+      const hostname = window.location.hostname;
+      const pathname = window.location.pathname;
+
+      console.log("Hostname:", hostname);
+      console.log("Pathname:", pathname);
+
+      return (
+        hostname.includes("discordsays.com") ||
+        hostname.includes("discord.com") ||
+        pathname.includes("/.proxy")
+      );
+    }
+
+
+    const runningInDiscord = isDiscordActivity();
+
+    const streamUrl = runningInDiscord
+      ? DISCORD_PROXY_STREAM
+      : DIRECT_STREAM;
+
+
+    console.log(
+      "Ortam:",
+      runningInDiscord
+        ? "Discord Activity"
+        : "Normal tarayıcı"
+    );
+
+    console.log(
+      "Kullanılan yayın URL:",
+      streamUrl
+    );
+
+
+    async function playVideo() {
+
       try {
+
         await video.play();
 
         setStatus(
@@ -120,43 +161,289 @@
 
       } catch (error) {
 
-        console.error("PLAY ERROR:", error);
+        console.error(
+          "PLAY ERROR:",
+          error
+        );
 
         setStatus(
-          "Video yüklendi fakat otomatik oynatma başarısız.\n" +
+          "Yayın yüklendi fakat otomatik oynatma engellendi.\n\n" +
           error.message,
           "error"
         );
+
       }
+
     }
 
-    function startHls() {
 
-      if (!Hls.isSupported()) {
+    function startPlayer() {
 
-        if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      setStatus(
+        runningInDiscord
+          ? "Discord Activity algılandı.\nYayın yükleniyor..."
+          : "Normal tarayıcı algılandı.\nYayın yükleniyor..."
+      );
 
-          setStatus(
-            "Tarayıcının yerleşik HLS desteği kullanılıyor..."
-          );
 
-          video.src = streamUrl;
+      // Chrome / Edge / Discord gibi ortamlarda
+      if (Hls.isSupported()) {
 
-          video.addEventListener(
-            "loadedmetadata",
-            () => {
-              setStatus("Yayın metadata'sı yüklendi.");
-              tryPlay();
-            },
-            { once: true }
-          );
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          backBufferLength: 30
+        });
 
-          return;
-        }
+        window.hls = hls;
+
+
+        hls.on(
+          Hls.Events.MEDIA_ATTACHED,
+          () => {
+
+            console.log(
+              "Video elementi HLS'e bağlandı."
+            );
+
+            setStatus(
+              "Video hazır.\nYayın listesi yükleniyor..."
+            );
+
+            hls.loadSource(streamUrl);
+
+          }
+        );
+
+
+        hls.on(
+          Hls.Events.MANIFEST_LOADING,
+          (event, data) => {
+
+            console.log(
+              "Manifest yükleniyor:",
+              data
+            );
+
+          }
+        );
+
+
+        hls.on(
+          Hls.Events.MANIFEST_LOADED,
+          (event, data) => {
+
+            console.log(
+              "Manifest indirildi:",
+              data
+            );
+
+          }
+        );
+
+
+        hls.on(
+          Hls.Events.MANIFEST_PARSED,
+          (event, data) => {
+
+            console.log(
+              "Manifest başarıyla işlendi:",
+              data
+            );
+
+            setStatus(
+              "Yayın bulundu.\nVideo başlatılıyor...",
+              "success"
+            );
+
+            playVideo();
+
+          }
+        );
+
+
+        hls.on(
+          Hls.Events.LEVEL_LOADED,
+          (event, data) => {
+
+            console.log(
+              "Yayın seviyesi yüklendi:",
+              data
+            );
+
+          }
+        );
+
+
+        hls.on(
+          Hls.Events.FRAG_LOADING,
+          (event, data) => {
+
+            console.log(
+              "Segment yükleniyor:",
+              data.frag?.url
+            );
+
+          }
+        );
+
+
+        hls.on(
+          Hls.Events.FRAG_LOADED,
+          (event, data) => {
+
+            console.log(
+              "Segment yüklendi:",
+              data.frag?.url
+            );
+
+          }
+        );
+
+
+        hls.on(
+          Hls.Events.ERROR,
+          (event, data) => {
+
+            console.error(
+              "HLS ERROR:",
+              data
+            );
+
+            let message =
+              "HLS hatası oluştu.";
+
+            if (data.details) {
+              message +=
+                "\n\nDetay:\n" +
+                data.details;
+            }
+
+            if (
+              data.response &&
+              data.response.code
+            ) {
+              message +=
+                "\n\nHTTP kodu:\n" +
+                data.response.code;
+            }
+
+            if (
+              data.response &&
+              data.response.url
+            ) {
+              message +=
+                "\n\nURL:\n" +
+                data.response.url;
+            }
+
+            if (data.url) {
+              message +=
+                "\n\nKaynak:\n" +
+                data.url;
+            }
+
+            if (data.fatal) {
+
+              setStatus(
+                "KRİTİK YAYIN HATASI\n\n" +
+                message,
+                "error"
+              );
+
+
+              if (
+                data.type ===
+                Hls.ErrorTypes.NETWORK_ERROR
+              ) {
+
+                console.warn(
+                  "Ağ hatası. Tekrar deneniyor..."
+                );
+
+                setTimeout(() => {
+                  hls.startLoad();
+                }, 2000);
+
+              }
+
+              else if (
+                data.type ===
+                Hls.ErrorTypes.MEDIA_ERROR
+              ) {
+
+                console.warn(
+                  "Medya hatası. Kurtarma deneniyor..."
+                );
+
+                hls.recoverMediaError();
+
+              }
+
+              else {
+
+                console.error(
+                  "Kurtarılamayan HLS hatası."
+                );
+
+                hls.destroy();
+
+              }
+
+            }
+
+            else {
+
+              setStatus(
+                message,
+                "error"
+              );
+
+            }
+
+          }
+        );
+
+
+        hls.attachMedia(video);
+
+        return;
+      }
+
+
+      // Safari gibi native HLS destekleyen tarayıcılar
+      if (
+        video.canPlayType(
+          "application/vnd.apple.mpegurl"
+        )
+      ) {
+
+        console.log(
+          "Native HLS kullanılıyor."
+        );
 
         setStatus(
-          "Bu tarayıcı HLS yayınlarını desteklemiyor.",
-          "error"
+          "Tarayıcının yerleşik HLS oynatıcısı kullanılıyor..."
+        );
+
+        video.src = streamUrl;
+
+
+        video.addEventListener(
+          "loadedmetadata",
+          () => {
+
+            setStatus(
+              "Yayın yüklendi.\nVideo başlatılıyor...",
+              "success"
+            );
+
+            playVideo();
+
+          },
+          {
+            once: true
+          }
         );
 
         return;
@@ -164,230 +451,29 @@
 
 
       setStatus(
-        "HLS.js başlatılıyor..."
+        "Bu tarayıcı HLS yayınını desteklemiyor.",
+        "error"
       );
-
-
-      const hls = new Hls({
-
-        enableWorker: true,
-
-        lowLatencyMode: true,
-
-        backBufferLength: 30
-
-      });
-
-
-      window.hls = hls;
-
-
-      hls.on(
-        Hls.Events.MEDIA_ATTACHED,
-        () => {
-
-          setStatus(
-            "Video elementi hazır.\nManifest yükleniyor..."
-          );
-
-          hls.loadSource(streamUrl);
-
-        }
-      );
-
-
-      hls.on(
-        Hls.Events.MANIFEST_LOADING,
-        (event, data) => {
-
-          console.log(
-            "Manifest yükleniyor:",
-            data
-          );
-
-          setStatus(
-            "TRT yayın listesi yükleniyor..."
-          );
-
-        }
-      );
-
-
-      hls.on(
-        Hls.Events.MANIFEST_PARSED,
-        (event, data) => {
-
-          console.log(
-            "Manifest başarıyla yüklendi:",
-            data
-          );
-
-          setStatus(
-            "Yayın bulundu.\nVideo başlatılıyor...",
-            "success"
-          );
-
-          tryPlay();
-
-        }
-      );
-
-
-      hls.on(
-        Hls.Events.LEVEL_LOADED,
-        (event, data) => {
-
-          console.log(
-            "Yayın seviyesi yüklendi:",
-            data
-          );
-
-        }
-      );
-
-
-      hls.on(
-        Hls.Events.FRAG_LOADING,
-        (event, data) => {
-
-          console.log(
-            "Video segmenti yükleniyor:",
-            data.frag?.url
-          );
-
-        }
-      );
-
-
-      hls.on(
-        Hls.Events.FRAG_LOADED,
-        (event, data) => {
-
-          console.log(
-            "Video segmenti geldi:",
-            data.frag?.url
-          );
-
-        }
-      );
-
-
-      hls.on(
-        Hls.Events.ERROR,
-        (event, data) => {
-
-          console.error(
-            "HLS ERROR:",
-            data
-          );
-
-          let message = "HLS hatası oluştu.";
-
-          if (data.details) {
-            message += "\n\nDetay:\n" + data.details;
-          }
-
-          if (data.response?.code) {
-            message +=
-              "\n\nHTTP kodu:\n" +
-              data.response.code;
-          }
-
-          if (data.response?.url) {
-            message +=
-              "\n\nURL:\n" +
-              data.response.url;
-          }
-
-          if (data.fatal) {
-
-            message =
-              "KRİTİK YAYIN HATASI\n\n" +
-              message;
-
-            setStatus(
-              message,
-              "error"
-            );
-
-
-            switch (data.type) {
-
-              case Hls.ErrorTypes.NETWORK_ERROR:
-
-                console.warn(
-                  "Network error. HLS tekrar deneniyor..."
-                );
-
-                hls.startLoad();
-
-                break;
-
-
-              case Hls.ErrorTypes.MEDIA_ERROR:
-
-                console.warn(
-                  "Media error. Kurtarma deneniyor..."
-                );
-
-                hls.recoverMediaError();
-
-                break;
-
-
-              default:
-
-                console.error(
-                  "HLS tamamen durduruldu."
-                );
-
-                hls.destroy();
-
-                break;
-            }
-
-          } else {
-
-            setStatus(
-              message,
-              "error"
-            );
-
-          }
-
-        }
-      );
-
-
-      hls.attachMedia(video);
 
     }
 
 
     video.addEventListener(
-      "error",
+      "playing",
       () => {
 
-        const error = video.error;
-
-        if (!error) {
-          return;
-        }
-
-        console.error(
-          "VIDEO ERROR:",
-          error
+        console.log(
+          "VIDEO PLAYING"
         );
 
         setStatus(
-          "Video elementi hata verdi.\n\n" +
-          "Kod: " +
-          error.code +
-          "\n\n" +
-          "Mesaj: " +
-          error.message,
-          "error"
+          "TRT 1 canlı yayın oynatılıyor.",
+          "success"
         );
+
+        setTimeout(() => {
+          statusBox.style.display = "none";
+        }, 2000);
 
       }
     );
@@ -398,7 +484,7 @@
       () => {
 
         console.log(
-          "Video buffer bekliyor."
+          "Video buffer bekliyor..."
         );
 
       }
@@ -406,30 +492,48 @@
 
 
     video.addEventListener(
-      "playing",
+      "stalled",
       () => {
 
-        console.log(
-          "Video oynuyor."
+        console.warn(
+          "Video bağlantısı takıldı."
         );
-
-        setStatus(
-          "TRT 1 canlı yayın oynatılıyor.",
-          "success"
-        );
-
-        setTimeout(() => {
-
-          statusBox.style.display =
-            "none";
-
-        }, 2000);
 
       }
     );
 
 
-    startHls();
+    video.addEventListener(
+      "error",
+      () => {
+
+        if (!video.error) {
+          return;
+        }
+
+        console.error(
+          "VIDEO ERROR:",
+          video.error
+        );
+
+        setStatus(
+          "Video oynatıcı hata verdi.\n\n" +
+          "Kod: " +
+          video.error.code +
+          "\n\n" +
+          "Mesaj: " +
+          (
+            video.error.message ||
+            "Bilinmeyen hata"
+          ),
+          "error"
+        );
+
+      }
+    );
+
+
+    startPlayer();
 
   </script>
 
