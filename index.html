@@ -3,18 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Canlı Yayın</title>
+
+  <title>TRT 1 Canlı Yayın</title>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     html,
     body {
       margin: 0;
+      padding: 0;
       width: 100%;
       height: 100%;
       background: #000;
       overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+
+    .player-wrapper {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #000;
     }
 
     video {
@@ -23,45 +37,400 @@
       object-fit: contain;
       background: #000;
     }
+
+    #status {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+
+      max-width: calc(100% - 24px);
+
+      padding: 10px 14px;
+
+      background: rgba(0, 0, 0, 0.75);
+      color: white;
+
+      font-size: 14px;
+      line-height: 1.4;
+
+      border-radius: 8px;
+
+      z-index: 10;
+
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    #status.success {
+      background: rgba(0, 120, 0, 0.8);
+    }
+
+    #status.error {
+      background: rgba(160, 0, 0, 0.85);
+    }
   </style>
 </head>
 
 <body>
 
-  <video
-    id="video"
-    controls
-    autoplay
-    muted
-    playsinline
-  ></video>
+  <div class="player-wrapper">
+
+    <div id="status">
+      Yayın hazırlanıyor...
+    </div>
+
+    <video
+      id="video"
+      controls
+      autoplay
+      muted
+      playsinline
+    ></video>
+
+  </div>
 
   <script>
     const video = document.getElementById("video");
+    const statusBox = document.getElementById("status");
 
-    const streamUrl = "https://tv-trt1.medya.trt.com.tr/master_720.m3u8";
+    // Discord Activity URL Mapping kullanıyorsan:
+    const streamUrl = "/trt/master_720.m3u8";
 
-    if (Hls.isSupported()) {
-      const hls = new Hls();
+    // Normal GitHub Pages testinde kullanmak istersen:
+    // const streamUrl = "https://tv-trt1.medya.trt.com.tr/master_720.m3u8";
 
-      hls.loadSource(streamUrl);
+    function setStatus(message, type = "") {
+      statusBox.textContent = message;
+      statusBox.className = type;
+      console.log(message);
+    }
+
+    async function tryPlay() {
+      try {
+        await video.play();
+
+        setStatus(
+          "Yayın oynatılıyor.",
+          "success"
+        );
+
+        setTimeout(() => {
+          statusBox.style.display = "none";
+        }, 2500);
+
+      } catch (error) {
+
+        console.error("PLAY ERROR:", error);
+
+        setStatus(
+          "Video yüklendi fakat otomatik oynatma başarısız.\n" +
+          error.message,
+          "error"
+        );
+      }
+    }
+
+    function startHls() {
+
+      if (!Hls.isSupported()) {
+
+        if (video.canPlayType("application/vnd.apple.mpegurl")) {
+
+          setStatus(
+            "Tarayıcının yerleşik HLS desteği kullanılıyor..."
+          );
+
+          video.src = streamUrl;
+
+          video.addEventListener(
+            "loadedmetadata",
+            () => {
+              setStatus("Yayın metadata'sı yüklendi.");
+              tryPlay();
+            },
+            { once: true }
+          );
+
+          return;
+        }
+
+        setStatus(
+          "Bu tarayıcı HLS yayınlarını desteklemiyor.",
+          "error"
+        );
+
+        return;
+      }
+
+
+      setStatus(
+        "HLS.js başlatılıyor..."
+      );
+
+
+      const hls = new Hls({
+
+        enableWorker: true,
+
+        lowLatencyMode: true,
+
+        backBufferLength: 30
+
+      });
+
+
+      window.hls = hls;
+
+
+      hls.on(
+        Hls.Events.MEDIA_ATTACHED,
+        () => {
+
+          setStatus(
+            "Video elementi hazır.\nManifest yükleniyor..."
+          );
+
+          hls.loadSource(streamUrl);
+
+        }
+      );
+
+
+      hls.on(
+        Hls.Events.MANIFEST_LOADING,
+        (event, data) => {
+
+          console.log(
+            "Manifest yükleniyor:",
+            data
+          );
+
+          setStatus(
+            "TRT yayın listesi yükleniyor..."
+          );
+
+        }
+      );
+
+
+      hls.on(
+        Hls.Events.MANIFEST_PARSED,
+        (event, data) => {
+
+          console.log(
+            "Manifest başarıyla yüklendi:",
+            data
+          );
+
+          setStatus(
+            "Yayın bulundu.\nVideo başlatılıyor...",
+            "success"
+          );
+
+          tryPlay();
+
+        }
+      );
+
+
+      hls.on(
+        Hls.Events.LEVEL_LOADED,
+        (event, data) => {
+
+          console.log(
+            "Yayın seviyesi yüklendi:",
+            data
+          );
+
+        }
+      );
+
+
+      hls.on(
+        Hls.Events.FRAG_LOADING,
+        (event, data) => {
+
+          console.log(
+            "Video segmenti yükleniyor:",
+            data.frag?.url
+          );
+
+        }
+      );
+
+
+      hls.on(
+        Hls.Events.FRAG_LOADED,
+        (event, data) => {
+
+          console.log(
+            "Video segmenti geldi:",
+            data.frag?.url
+          );
+
+        }
+      );
+
+
+      hls.on(
+        Hls.Events.ERROR,
+        (event, data) => {
+
+          console.error(
+            "HLS ERROR:",
+            data
+          );
+
+          let message = "HLS hatası oluştu.";
+
+          if (data.details) {
+            message += "\n\nDetay:\n" + data.details;
+          }
+
+          if (data.response?.code) {
+            message +=
+              "\n\nHTTP kodu:\n" +
+              data.response.code;
+          }
+
+          if (data.response?.url) {
+            message +=
+              "\n\nURL:\n" +
+              data.response.url;
+          }
+
+          if (data.fatal) {
+
+            message =
+              "KRİTİK YAYIN HATASI\n\n" +
+              message;
+
+            setStatus(
+              message,
+              "error"
+            );
+
+
+            switch (data.type) {
+
+              case Hls.ErrorTypes.NETWORK_ERROR:
+
+                console.warn(
+                  "Network error. HLS tekrar deneniyor..."
+                );
+
+                hls.startLoad();
+
+                break;
+
+
+              case Hls.ErrorTypes.MEDIA_ERROR:
+
+                console.warn(
+                  "Media error. Kurtarma deneniyor..."
+                );
+
+                hls.recoverMediaError();
+
+                break;
+
+
+              default:
+
+                console.error(
+                  "HLS tamamen durduruldu."
+                );
+
+                hls.destroy();
+
+                break;
+            }
+
+          } else {
+
+            setStatus(
+              message,
+              "error"
+            );
+
+          }
+
+        }
+      );
+
+
       hls.attachMedia(video);
 
-      hls.on(Hls.Events.MANIFEST_PARSED, function () {
-        video.play().catch(err => {
-          console.log("Otomatik oynatma engellendi:", err);
-        });
-      });
-
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = streamUrl;
-
-      video.addEventListener("loadedmetadata", function () {
-        video.play().catch(err => {
-          console.log("Otomatik oynatma engellendi:", err);
-        });
-      });
     }
+
+
+    video.addEventListener(
+      "error",
+      () => {
+
+        const error = video.error;
+
+        if (!error) {
+          return;
+        }
+
+        console.error(
+          "VIDEO ERROR:",
+          error
+        );
+
+        setStatus(
+          "Video elementi hata verdi.\n\n" +
+          "Kod: " +
+          error.code +
+          "\n\n" +
+          "Mesaj: " +
+          error.message,
+          "error"
+        );
+
+      }
+    );
+
+
+    video.addEventListener(
+      "waiting",
+      () => {
+
+        console.log(
+          "Video buffer bekliyor."
+        );
+
+      }
+    );
+
+
+    video.addEventListener(
+      "playing",
+      () => {
+
+        console.log(
+          "Video oynuyor."
+        );
+
+        setStatus(
+          "TRT 1 canlı yayın oynatılıyor.",
+          "success"
+        );
+
+        setTimeout(() => {
+
+          statusBox.style.display =
+            "none";
+
+        }, 2000);
+
+      }
+    );
+
+
+    startHls();
+
   </script>
 
 </body>
