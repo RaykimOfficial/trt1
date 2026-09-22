@@ -50,6 +50,8 @@
 
       white-space: pre-wrap;
       word-break: break-word;
+
+      transition: opacity 0.25s ease;
     }
 
     #status.success {
@@ -58,6 +60,11 @@
 
     #status.error {
       background: rgba(180, 0, 0, 0.95);
+    }
+
+    #status.hidden {
+      opacity: 0;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -84,46 +91,52 @@
   const video = document.getElementById("video");
   const statusBox = document.getElementById("status");
 
-  // Discord Developer Portal:
-  // /trt -> tv-trt1.medya.trt.com.tr
-
   const streamUrl = "/trt/master_720.m3u8";
 
+  let yayinBasladi = false;
+  let hideTimer = null;
 
-  function status(message, type = "") {
-    console.log(message);
+
+  function showStatus(message, type = "", force = false) {
+
+    // Yayın başladıktan sonra normal bilgi mesajlarını gösterme
+    if (yayinBasladi && !force && type !== "error") {
+      return;
+    }
+
+    clearTimeout(hideTimer);
 
     statusBox.textContent = message;
     statusBox.className = type;
-    statusBox.style.display = "block";
+
+    console.log(message);
+  }
+
+
+  function hideStatus(delay = 1200) {
+
+    clearTimeout(hideTimer);
+
+    hideTimer = setTimeout(() => {
+      statusBox.classList.add("hidden");
+    }, delay);
   }
 
 
   async function playVideo() {
+
     try {
 
       await video.play();
 
-      status(
-        "TRT 1 canlı yayın oynuyor.",
-        "success"
-      );
-
-      setTimeout(() => {
-        statusBox.style.display = "none";
-      }, 2000);
-
     } catch (error) {
 
-      console.error(
-        "PLAY ERROR:",
-        error
-      );
+      console.error("PLAY ERROR:", error);
 
-      status(
-        "Video yüklendi fakat oynatma başlatılamadı.\n\n" +
-        error.message,
-        "error"
+      showStatus(
+        "Video yüklendi fakat otomatik oynatma başlatılamadı.\nPlay tuşuna bas.",
+        "error",
+        true
       );
     }
   }
@@ -132,9 +145,11 @@
   function start() {
 
     if (typeof Hls === "undefined") {
-      status(
+
+      showStatus(
         "HATA: HLS.JS yüklenemedi.",
-        "error"
+        "error",
+        true
       );
 
       return;
@@ -143,8 +158,8 @@
 
     if (Hls.isSupported()) {
 
-      status(
-        "HLS hazır.\nTRT 1 yayınına bağlanılıyor..."
+      showStatus(
+        "TRT 1 yayınına bağlanılıyor..."
       );
 
 
@@ -162,8 +177,8 @@
         Hls.Events.MEDIA_ATTACHED,
         function () {
 
-          status(
-            "Video hazır.\nYayın listesi yükleniyor..."
+          showStatus(
+            "Yayın listesi yükleniyor..."
           );
 
           hls.loadSource(streamUrl);
@@ -173,30 +188,15 @@
 
 
       hls.on(
-        Hls.Events.MANIFEST_LOADING,
+        Hls.Events.MANIFEST_PARSED,
         function () {
 
-          status(
-            "TRT yayın listesi indiriliyor..."
-          );
-
-        }
-      );
-
-
-      hls.on(
-        Hls.Events.MANIFEST_PARSED,
-        function (event, data) {
-
-          console.log(
-            "MANIFEST PARSED:",
-            data
-          );
-
-          status(
-            "Yayın listesi geldi.\nVideo parçaları bekleniyor...",
+          showStatus(
+            "Yayın bulundu. Video başlatılıyor...",
             "success"
           );
+
+          playVideo();
 
         }
       );
@@ -207,12 +207,8 @@
         function (event, data) {
 
           console.log(
-            "SEGMENT İSTENİYOR:",
+            "Segment yükleniyor:",
             data.frag.url
-          );
-
-          status(
-            "Video parçası indiriliyor..."
           );
 
         }
@@ -224,30 +220,9 @@
         function (event, data) {
 
           console.log(
-            "SEGMENT GELDİ:",
+            "Segment geldi:",
             data.frag.url
           );
-
-          status(
-            "Video parçası geldi.\nYayın başlatılıyor...",
-            "success"
-          );
-
-        }
-      );
-
-
-      hls.on(
-        Hls.Events.BUFFER_APPENDED,
-        function () {
-
-          console.log(
-            "BUFFER APPENDED"
-          );
-
-          if (video.paused) {
-            playVideo();
-          }
 
         }
       );
@@ -264,16 +239,9 @@
 
 
           let message =
-            "HLS HATASI\n\n" +
+            "Yayın hatası\n\n" +
             "Detay: " +
             data.details;
-
-
-          if (data.type) {
-            message +=
-              "\nTür: " +
-              data.type;
-          }
 
 
           if (data.response?.code) {
@@ -290,16 +258,10 @@
           }
 
 
-          if (data.frag?.url) {
-            message +=
-              "\nSegment: " +
-              data.frag.url;
-          }
-
-
-          status(
+          showStatus(
             message,
-            "error"
+            "error",
+            true
           );
 
 
@@ -309,10 +271,6 @@
               data.type ===
               Hls.ErrorTypes.NETWORK_ERROR
             ) {
-
-              console.log(
-                "Network recovery..."
-              );
 
               setTimeout(() => {
                 hls.startLoad();
@@ -325,19 +283,11 @@
               Hls.ErrorTypes.MEDIA_ERROR
             ) {
 
-              console.log(
-                "Media recovery..."
-              );
-
               hls.recoverMediaError();
 
             }
 
             else {
-
-              console.log(
-                "HLS durduruldu."
-              );
 
               hls.destroy();
 
@@ -358,27 +308,22 @@
       )
     ) {
 
-      status(
-        "Tarayıcının yerleşik HLS desteği kullanılıyor..."
-      );
-
       video.src = streamUrl;
 
       video.addEventListener(
         "loadedmetadata",
         playVideo,
-        {
-          once: true
-        }
+        { once: true }
       );
 
     }
 
     else {
 
-      status(
-        "Bu tarayıcı HLS desteklemiyor.",
-        "error"
+      showStatus(
+        "Bu ortam HLS desteklemiyor.",
+        "error",
+        true
       );
 
     }
@@ -387,50 +332,20 @@
 
 
   video.addEventListener(
-    "loadedmetadata",
-    function () {
-      console.log(
-        "VIDEO METADATA GELDİ"
-      );
-    }
-  );
-
-
-  video.addEventListener(
-    "canplay",
-    function () {
-
-      console.log(
-        "VIDEO CANPLAY"
-      );
-
-      status(
-        "Video oynatılmaya hazır.",
-        "success"
-      );
-
-      playVideo();
-
-    }
-  );
-
-
-  video.addEventListener(
     "playing",
     function () {
 
-      console.log(
-        "VIDEO PLAYING"
-      );
+      console.log("VIDEO PLAYING");
 
-      status(
+      yayinBasladi = true;
+
+      showStatus(
         "TRT 1 canlı yayın oynuyor.",
-        "success"
+        "success",
+        true
       );
 
-      setTimeout(() => {
-        statusBox.style.display = "none";
-      }, 2000);
+      hideStatus(1200);
 
     }
   );
@@ -440,9 +355,10 @@
     "waiting",
     function () {
 
-      console.log(
-        "VIDEO WAITING"
-      );
+      console.log("VIDEO WAITING");
+
+      // Buffer sırasında yazı göstermiyoruz.
+      // Yayın görüntüsü kesilip geri gelirse kutu ekranda zıplamaz.
 
     }
   );
@@ -457,19 +373,20 @@
         video.error
       );
 
-      if (video.error) {
-
-        status(
-          "VIDEO HATASI\n\n" +
-          "Kod: " +
-          video.error.code +
-          "\n" +
-          "Mesaj: " +
-          video.error.message,
-          "error"
-        );
-
+      if (!video.error) {
+        return;
       }
+
+
+      showStatus(
+        "Video hatası\n\n" +
+        "Kod: " +
+        video.error.code +
+        "\nMesaj: " +
+        video.error.message,
+        "error",
+        true
+      );
 
     }
   );
